@@ -388,6 +388,12 @@ class ArknightsHelper(object):
                 smobj.state = on_level_up_popup
                 return
 
+            if imgreco.end_operation.check_annihilation_report(screenshot): #检测剿灭报告
+                logger.info("剿灭报告")
+                self.operation_time.append(t)
+                smobj.state = on_annihilation_report
+                return
+
             if smobj.prepare_reco['consume_ap']:
                 detector = imgreco.end_operation.check_end_operation
             else:
@@ -434,6 +440,13 @@ class ArknightsHelper(object):
             self.wait_for_still_image()
             smobj.state = on_end_operation
 
+        def on_annihilation_report(smobj):
+            self.__wait(SMALL_WAIT, MANLIKE_FLAG=True)
+            logger.info('关闭剿灭报告')
+            self.tap_rect(imgreco.end_operation.get_dismiss_level_up_popup_rect(self.viewport))
+            self.wait_for_still_image()
+            smobj.state = on_end_operation
+        
         def on_end_operation(smobj):
             screenshot = self.adb.screenshot()
             logger.info('离开结算画面')

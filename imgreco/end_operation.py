@@ -82,7 +82,8 @@ def tell_group_name_alt(img, session):
              ('幸运', '幸运掉落'),
              ('额外', '额外物资'),
              ('首次', '首次掉落'),
-             ('返还', '理智返还')]
+             ('返还', '理智返还'),
+             ('报酬', '报酬')]
     comparsions = []
     scale = session.vh * 100 / 1080
 
@@ -137,6 +138,12 @@ def roundint(x):
 
 # scale = 0
 
+def check_annihilation_report(img):
+    vw, vh = util.get_vwvh(img.size)
+    template = resources.load_image_cached('end_operation/annihilation.png', 'L')
+    operation_end_img = img.crop((24.583*vh, 40.000*vh, 35.556*vh, 42.639*vh)).convert('L')
+    mse = imgops.compare_mse(*imgops.uniform_size(template, operation_end_img))
+    return mse < 3251
 
 def check_level_up_popup(img):
     vw, vh = util.get_vwvh(img.size)
