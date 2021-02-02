@@ -75,6 +75,20 @@ def _parse_opt(argv):
                 break
             else:
                 raise ValueError('unrecognized token: %r in option %r' % (c, opts))
+    elif len(argv) >= 2 and argv[1]=="m":
+        argv.pop(1)
+        material = argv.pop(1)
+        num = int(argv.pop(1))
+        enable_material = True
+        enable_refill = True        
+        def op(helper):
+            helper.use_material = enable_material
+            helper.material_name = material
+            helper.material_num = num
+            helper.use_refill = enable_refill
+            helper.refill_with_item = enable_refill
+            helper.refill_with_originium = enable_refill
+        ops.append(op)
     return ops
 
 

@@ -66,6 +66,9 @@ class ArknightsHelper(object):
             self.__print_info()
         self.refill_with_item = config.get('behavior/refill_ap_with_item', False)
         self.refill_with_originium = config.get('behavior/refill_ap_with_originium', False)
+        self.use_material= None
+        self.material_name = None
+        self.material_num = None
         self.use_refill = self.refill_with_item or self.refill_with_originium
         self.loots = {}
         self.use_penguin_report = config.get('reporting/enabled', False)
@@ -226,10 +229,17 @@ class ArknightsHelper(object):
         if set_count == 0:
             return True
         self.operation_time = []
+        if self.use_material:
+            logger.info('目标材料名称：%s',self.material_name)
+            logger.info('目标材料数量：%s',self.material_num)
         count = 0
         try:
             for count in range(set_count):
                 # logger.info("开始第 %d 次战斗", count + 1)
+                if self.use_material:
+                    if self.material_num <= 0:
+                        logger.info('目标掉落达成，结束战斗')
+                        break
                 self.operation_once_statemachine(c_id, )
                 logger.info("第 %d 次作战完成", count + 1)
                 if count != set_count - 1:
@@ -434,11 +444,19 @@ class ArknightsHelper(object):
                 drops = imgreco.end_operation.recognize(screenshot)
                 logger.debug('%s', repr(drops))
                 logger.info('掉落识别结果：%s', format_recoresult(drops))
+                round_material = 0
                 log_total = len(self.loots)
                 for _, group in drops['items']:
                     for name, qty in group:
                         if name is not None and qty is not None:
+                            # 目标掉落统计
+                            if self.use_material:
+                                if name == self.material_name:
+                                    round_material += qty
                             self.loots[name] = self.loots.get(name, 0) + qty
+                if self.use_material:
+                    self.material_num -= round_material
+                    logger.info('%s：本轮掉落 %d 个，距离目标掉落数 %d 个', self.material_name, round_material, self.material_num)
                 if log_total:
                     self.log_total_loots()
                 if self.use_penguin_report:
