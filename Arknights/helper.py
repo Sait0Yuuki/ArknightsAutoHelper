@@ -20,10 +20,18 @@ from Arknights.click_location import *
 from Arknights.flags import *
 from util.exc_guard import guard
 
+import redis
+import json
+from Arknights.mitm import conn_pool
+
+pool = redis.Redis(connection_pool = conn_pool)
+item_file = json.loads(open('./resources/item_table.json', 'r', encoding='UTF-8').read())
+item_table = item_file['items']
+
 logger = logging.getLogger('helper')
 coloredlogs.install(
-    fmt=' Ξ %(message)s',
-    #fmt=' %(asctime)s ! %(funcName)s @ %(filename)s:%(lineno)d ! %(levelname)s # %(message)s',
+    #fmt=' Ξ %(message)s',
+    fmt=' %(asctime)s ! %(funcName)s @ %(filename)s:%(lineno)d ! %(levelname)s # %(message)s',
     datefmt='%H:%M:%S',
     level_styles={'warning': {'color': 'green'}, 'error': {'color': 'red'}},
     level='INFO')
@@ -257,10 +265,12 @@ class ArknightsHelper(object):
         if not sub:
             if auto_close:
                 logger.info("简略模块{}结束，系统准备退出".format(c_id))
+                pool.flushall()
                 self.__wait(120, False)
                 self.__del()
             else:
                 logger.info("简略模块{}结束".format(c_id))
+                pool.flushall()
                 return True
         else:
             logger.info("当前任务{}结束，准备进行下一项任务".format(c_id))
@@ -371,9 +381,11 @@ class ArknightsHelper(object):
         def on_operation(smobj):
             if smobj.first_wait:
                 if len(self.operation_time) == 0:
+                    pool.flushall()
                     wait_time = BATTLE_NONE_DETECT_TIME
                 else:
-                    wait_time = sum(self.operation_time) / len(self.operation_time) - 7
+                    complete = json.loads(pool.rpop('battleFinishTime'))
+                    wait_time = int(complete['battleData']['completeTime']) + 10
                 logger.info('等待 %d s' % wait_time)
                 self.__wait(wait_time, MANLIKE_FLAG=False)
                 smobj.first_wait = False
@@ -394,16 +406,12 @@ class ArknightsHelper(object):
                 smobj.state = on_annihilation_report
                 return
 
-            if smobj.prepare_reco['consume_ap']:
-                detector = imgreco.end_operation.check_end_operation
-            else:
-                detector = imgreco.end_operation.check_end_operation_alt
-            if detector(screenshot):
+            if pool.exists('battleFinish'):
                 logger.info('战斗结束')
+                self.__wait(8)
                 self.operation_time.append(t)
-                crop = imgreco.end_operation.get_still_check_rect(self.viewport)
-                if self.wait_for_still_image(crop=crop, timeout=15, raise_for_timeout=True):
-                    smobj.state = on_end_operation
+                imgreco.end_operation.get_still_check_rect(self.viewport)
+                smobj.state = on_end_operation
                 return
             dlgtype, ocrresult = imgreco.common.recognize_dialog(screenshot)
             if dlgtype is not None:
@@ -448,25 +456,49 @@ class ArknightsHelper(object):
             smobj.state = on_end_operation
         
         def on_end_operation(smobj):
-            screenshot = self.adb.screenshot()
+            #screenshot = self.adb.screenshot()
             logger.info('离开结算画面')
             self.tap_rect(imgreco.end_operation.get_dismiss_end_operation_rect(self.viewport))
             reportresult = penguin_stats.reporter.ReportResult.NotReported
             try:
                 # 掉落识别
-                drops = imgreco.end_operation.recognize(screenshot)
-                logger.debug('%s', repr(drops))
-                logger.info('掉落识别结果：%s', format_recoresult(drops))
                 round_material = 0
                 log_total = len(self.loots)
-                for _, group in drops['items']:
-                    for name, qty in group:
-                        if name is not None and qty is not None:
-                            # 目标掉落统计
-                            if self.use_material:
-                                if name == self.material_name:
-                                    round_material += qty
-                            self.loots[name] = self.loots.get(name, 0) + qty
+                drops = json.loads(pool.rpop('battleFinish'))
+                logger.debug('%s', repr(drops))
+                message = ''
+                if drops.get('rewards'):
+                    message += '本轮掉落：常规掉落：'
+                    for r in drops['rewards']:
+                        name = item_table[r['id']]['name']
+                        count = r['count']
+                        message += name + 'x' + str(count) + ' '
+                        self.loots[name] = self.loots.get(name,0) + count
+                        if self.use_material:
+                            if name == self.material_name:
+                                round_material += count
+                if drops.get('additionalRewards'):
+                    message += '额外物资：'
+                    for r in drops['additionalRewards']:
+                        name = item_table[r['id']]['name']
+                        count = r['count']
+                        message += name + 'x' + str(count) + ' '
+                        self.loots[name] = self.loots.get(name,0) + count
+                        if self.use_material:
+                            if name == self.material_name:
+                                round_material += count
+                if drops.get('diamondMaterialRewards'):
+                    message += '报酬：'
+                    for r in drops['diamondMaterialRewards']:
+                        name = item_table[r['id']]['name']
+                        count = r['count']
+                        message += name + 'x' + str(count) + ' '
+                        self.loots[name] = self.loots.get(name,0) + count
+                        if self.use_material:
+                            if name == self.material_name:
+                                round_material += count
+                        
+                logger.info(message)                         
                 if self.use_material:
                     self.material_num -= round_material
                     logger.info('%s：本轮掉落 %d 个，距离目标掉落数 %d 个', self.material_name, round_material, self.material_num)
@@ -481,7 +513,8 @@ class ArknightsHelper(object):
             if self.use_penguin_report and reportresult is penguin_stats.reporter.ReportResult.NotReported:
                 filename = os.path.join(config.SCREEN_SHOOT_SAVE_PATH, '未上报掉落-%d.png' % time.time())
                 with open(filename, 'wb') as f:
-                    screenshot.save(f, format='PNG')
+                    pass
+                    #screenshot.save(f, format='PNG')
                 logger.error('未上报掉落截图已保存到 %s', filename)
             smobj.stop = True
 

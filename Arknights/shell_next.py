@@ -6,7 +6,6 @@ import signal
 from .fancycli import fancywait
 from .fancycli.platform import isatty
 
-
 def skipcallback(handler):
     raise StopIteration
 
@@ -227,6 +226,7 @@ def interactive(argv):
                 print(' '.join(x.__name__ for x in interactive_cmds))
                 continue
             elif argv[0] == 'exit':
+                exit(argv)
                 break
             cmd = match_cmd(argv[0], interactive_cmds)
             if cmd is not None:
@@ -264,7 +264,10 @@ def help(argv):
 
 
 def exit(argv):
-    sys.exit()
+    import os
+    os.system("sudo redis-cli shutdown")
+    #os.system("kill -9 $(ps ax | grep redis-server | fgrep -v grep | awk '{ print $1 }')")
+    os.system("kill -9 $(ps ax | grep mitm.py | fgrep -v grep | awk '{ print $1 }')")
 
 
 global_cmds = [quick, auto, collect, recruit, interactive, help]

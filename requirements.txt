@@ -7,5 +7,8 @@ opencv-python==4.4.0.46
 Pillow==8.0.1
 requests==2.25.0
 ruamel.yaml==0.16.10
+mitmdump==1.1.2
+mitmproxy==6.0.2
+redis==3.5.3
 colorama==0.4.4; sys_platform == 'win32'
 ./vendor/penguin_client
